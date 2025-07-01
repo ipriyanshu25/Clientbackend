@@ -2,7 +2,6 @@
 const Campaign         = require('../models/campaign');
 const Client           = require('../models/client');
 const Service          = require('../models/services');
-const SubscriptionPlan = require('../models/servicePlan');
 const { v4: uuidv4 }   = require('uuid');
 
 // Create a new campaign
