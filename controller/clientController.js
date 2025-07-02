@@ -97,3 +97,13 @@ exports.updatePassword = async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 };
+
+
+exports.getAllClients = async (req, res) => {
+  try {
+    const clients = await Client.find().select('-_id -__v -password');
+    res.status(200).json(clients);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};

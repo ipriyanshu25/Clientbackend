@@ -10,6 +10,7 @@ const clientRouter = require('./routes/clientRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
 const campaignRoutes = require('./routes/campaignRoutes');
 const paymentRoutes       = require('./routes/paymentRoutes');
+const adminRoutes = require('./routes/adminRoutes'); // Uncomment if you have admin routes
 
 
 
@@ -18,7 +19,9 @@ const server = http.createServer(app);
 
 // attach Socket.io
 app.use(cors({
-  origin:      process.env.FRONTEND_ORIGIN || 'https://sharemitra.com',
+  // origin:      process.env.FRONTEND_ORIGIN || 'https://sharemitra.com',
+  // origin:      process.env.FRONTEND_ORIGIN || 'https://sharemitra.com',
+  origin:      process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
   credentials: true,
 }));
 
@@ -29,6 +32,7 @@ app.use('/client', clientRouter);
 app.use('/service', serviceRoutes);
 app.use('/campaign', campaignRoutes);
 app.use('/payment', paymentRoutes);
+app.use('/admin', adminRoutes); // Uncomment if you have admin routes
 
 // connect to Mongo & start server
 const PORT = process.env.PORT || 5000;
