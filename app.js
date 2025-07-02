@@ -18,7 +18,7 @@ const server = http.createServer(app);
 
 // attach Socket.io
 app.use(cors({
-  origin:      process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
+  origin:      process.env.FRONTEND_ORIGIN || 'https://sharemitra.com',
   credentials: true,
 }));
 

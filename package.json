@@ -19,6 +19,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.16.1",
     "razorpay": "^2.9.6",
+    "sweetalert2": "^11.22.2",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
