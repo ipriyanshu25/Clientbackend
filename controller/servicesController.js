@@ -1,37 +1,64 @@
-// controllers/serviceController.js
+// controllers/servicesController.js
 const Service = require('../models/services');
 const { v4: uuidv4 } = require('uuid');
 
-// Create a new service
+// Create a new service (with optional logo upload)
 exports.createService = async (req, res) => {
   try {
     const { serviceHeading, serviceDescription, serviceContent } = req.body;
 
+    // Validate and parse serviceContent JSON
+    let contentArray;
+    try {
+      contentArray = JSON.parse(serviceContent);
+    } catch {
+      return res.status(400).json({ error: 'serviceContent must be valid JSON' });
+    }
     if (
-      !Array.isArray(serviceContent) ||
-      !serviceContent.every(
-        item =>
-          item &&
-          typeof item.key === 'string' &&
-          item.key.trim() &&
-          typeof item.value === 'string' &&
-          item.value.trim()
+      !Array.isArray(contentArray) ||
+      !contentArray.every(item =>
+        item &&
+        typeof item.key === 'string' && item.key.trim() &&
+        typeof item.value === 'string' && item.value.trim()
       )
     ) {
-      return res
-        .status(400)
-        .json({ error: 'serviceContent must be an array of { key: string, value: string }' });
+      return res.status(400).json({
+        error: 'serviceContent must be an array of { key: string, value: string }'
+      });
     }
 
-    const service = new Service({ serviceHeading, serviceDescription, serviceContent });
-    await service.save();
-    return res.status(201).json(service);
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
+    // Create service document
+    const svc = new Service({
+      serviceHeading: serviceHeading.trim(),
+      serviceDescription: serviceDescription.trim(),
+      serviceContent: contentArray.map(item => ({
+        contentId: uuidv4(),
+        key: item.key.trim(),
+        value: item.value.trim()
+      }))
+    });
+
+    // Attach logo if uploaded: store base64 string only
+    if (req.file) {
+      svc.logo = req.file.buffer.toString('base64');
+    }
+
+    await svc.save();
+    // Respond with minimal fields
+    return res.status(201).json({
+      serviceId: svc.serviceId,
+      serviceHeading: svc.serviceHeading,
+      serviceDescription: svc.serviceDescription,
+      serviceContent: svc.serviceContent,
+      logo: svc.logo || null
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 };
 
-// Get all services (with pagination + optional search)
+
+// Get all services (pagination + optional search)
 exports.getAllServices = async (req, res) => {
   try {
     const { page = 1, limit = 10, search = '' } = req.query;
@@ -66,115 +93,101 @@ exports.getAllServices = async (req, res) => {
   }
 };
 
-// Get one service by its UUID
+// Get one service by UUID
 exports.getServiceById = async (req, res) => {
   try {
     const { serviceId } = req.body;
     if (!serviceId) {
       return res.status(400).json({ error: 'serviceId is required' });
     }
-
     const service = await Service.findOne({ serviceId }).select('-_id -__v');
     if (!service) {
       return res.status(404).json({ error: 'Service not found' });
     }
-
     return res.status(200).json(service);
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
 };
 
-// Update an existing service
+// Update an existing service (with optional logo replacement)
 exports.updateService = async (req, res) => {
   try {
     const { serviceId, serviceHeading, serviceDescription, serviceContent } = req.body;
-    if (!serviceId) {
-      return res.status(400).json({ error: 'serviceId is required' });
-    }
+    if (!serviceId) return res.status(400).json({ error: 'serviceId is required' });
 
-    const service = await Service.findOne({ serviceId });
-    if (!service) {
-      return res.status(404).json({ error: 'Service not found' });
-    }
+    const svc = await Service.findOne({ serviceId });
+    if (!svc) return res.status(404).json({ error: 'Service not found' });
 
-    // Overwrite heading/description if provided
     if (typeof serviceHeading === 'string') {
-      service.serviceHeading = serviceHeading.trim();
+      svc.serviceHeading = serviceHeading.trim();
     }
     if (typeof serviceDescription === 'string') {
-      service.serviceDescription = serviceDescription.trim();
+      svc.serviceDescription = serviceDescription.trim();
     }
 
-    // Merge incoming serviceContent
-    if (serviceContent !== undefined) {
+    if (serviceContent) {
+      let contentArray;
+      try {
+        contentArray = JSON.parse(serviceContent);
+      } catch {
+        return res.status(400).json({ error: 'serviceContent must be valid JSON' });
+      }
       if (
-        !Array.isArray(serviceContent) ||
-        !serviceContent.every(item =>
+        !Array.isArray(contentArray) ||
+        !contentArray.every(item =>
           item &&
-          typeof item.key === 'string' &&
-          item.key.trim() &&
-          typeof item.value === 'string' &&
-          item.value.trim() &&
-          // if contentId is present, it must be a string:
+          typeof item.key === 'string' && item.key.trim() &&
+          typeof item.value === 'string' && item.value.trim() &&
           (item.contentId === undefined || typeof item.contentId === 'string')
         )
       ) {
-        return res
-          .status(400)
-          .json({ error: 'serviceContent must be an array of { contentId?: string, key: string, value: string }' });
+        return res.status(400).json({
+          error: 'serviceContent must be an array of { contentId?: string, key: string, value: string }'
+        });
       }
 
-      serviceContent.forEach(({ contentId, key, value }) => {
-        const k = key.trim();
-        const v = value.trim();
-
+      contentArray.forEach(({ contentId, key, value }) => {
+        const k = key.trim(), v = value.trim();
         if (contentId) {
-          // update existing item
-          const existing = service.serviceContent.find(c => c.contentId === contentId);
+          const existing = svc.serviceContent.find(c => c.contentId === contentId);
           if (existing) {
-            existing.key   = k;
+            existing.key = k;
             existing.value = v;
           }
-          // else: ignore invalid contentId
         } else {
-          // add new item
-          service.serviceContent.push({
-            contentId: uuidv4(),
-            key:       k,
-            value:     v
-          });
+          svc.serviceContent.push({ contentId: uuidv4(), key: k, value: v });
         }
       });
     }
 
-    await service.save();
+    // Replace logo if a new file is uploaded
+    if (req.file) {
+      svc.logo = req.file.buffer.toString('base64');
+    }
 
-    const out = service.toObject();
-    delete out._id;
-    delete out.__v;
-
+    await svc.save();
+    // Respond with minimal fields
     return res.status(200).json({
-      message: 'Service updated successfully',
-      service: out
+      serviceId: svc.serviceId,
+      serviceHeading: svc.serviceHeading,
+      serviceDescription: svc.serviceDescription,
+      serviceContent: svc.serviceContent,
+      logo: svc.logo || null
     });
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 };
 
-// Delete an entire service
+// Delete entire service
 exports.deleteService = async (req, res) => {
   try {
     const { serviceId } = req.body;
-    if (!serviceId) {
-      return res.status(400).json({ error: 'serviceId is required' });
-    }
+    if (!serviceId) return res.status(400).json({ error: 'serviceId is required' });
 
     const deleted = await Service.findOneAndDelete({ serviceId });
-    if (!deleted) {
-      return res.status(404).json({ error: 'Service not found' });
-    }
+    if (!deleted) return res.status(404).json({ error: 'Service not found' });
 
     return res.status(200).json({ message: 'Service deleted successfully' });
   } catch (error) {
@@ -182,36 +195,28 @@ exports.deleteService = async (req, res) => {
   }
 };
 
-// Delete a single content item from a service
+// Delete a single content item
 exports.deleteServiceContent = async (req, res) => {
   try {
     const { serviceId, contentId } = req.body;
     if (!serviceId || !contentId) {
-      return res
-        .status(400)
-        .json({ error: 'serviceId and contentId are required to delete content' });
+      return res.status(400).json({ error: 'serviceId and contentId are required' });
     }
 
-    const service = await Service.findOne({ serviceId });
-    if (!service) {
-      return res.status(404).json({ error: 'Service not found' });
+    const svc = await Service.findOne({ serviceId });
+    if (!svc) return res.status(404).json({ error: 'Service not found' });
+
+    const origLen = svc.serviceContent.length;
+    svc.serviceContent = svc.serviceContent.filter(c => c.contentId !== contentId);
+    if (svc.serviceContent.length === origLen) {
+      return res.status(404).json({ error: 'Content not found' });
     }
 
-    const originalLength = service.serviceContent.length;
-    service.serviceContent = service.serviceContent.filter(c => c.contentId !== contentId);
-
-    if (service.serviceContent.length === originalLength) {
-      return res.status(404).json({ error: `Content with id "${contentId}" not found` });
-    }
-
-    await service.save();
-
-    const out = service.toObject();
-    delete out._id;
-    delete out.__v;
-
+    await svc.save();
+    const out = svc.toObject();
+    delete out._id; delete out.__v;
     return res.status(200).json({
-      message: 'Service content deleted successfully',
+      message: 'Content deleted successfully',
       service: out
     });
   } catch (error) {

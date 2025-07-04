@@ -2,13 +2,6 @@ const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 
 const actionSchema = new mongoose.Schema({
-  actionId: {
-    type: String,
-    default: () => uuidv4(),
-    required: true,
-    unique: false
-  },
-  // links back to Service.serviceContent.contentId
   contentId: {
     type: String,
     required: true
@@ -77,11 +70,6 @@ const campaignSchema = new mongoose.Schema({
     type: Number,
     required: true,
     min: 0
-  },
-  status: {
-    type: String,
-    enum: ['pending', 'paid', 'in_progress', 'completed', 'failed'],
-    default: 'pending'
   }
 }, {
   timestamps: true

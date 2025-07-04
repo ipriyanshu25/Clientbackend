@@ -1,13 +1,12 @@
+// models/services.js
 const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 
-// sub-schema for individual content items, now with its own contentId
-const serviceContentSchema = new mongoose.Schema({
+const contentSchema = new mongoose.Schema({
   contentId: {
     type: String,
-    default: () => uuidv4(),
-    required: true,
-    unique: false
+    default: uuidv4,
+    unique: true
   },
   key: {
     type: String,
@@ -19,14 +18,12 @@ const serviceContentSchema = new mongoose.Schema({
     required: true,
     trim: true
   }
-}, { _id: false }); // we’re using contentId instead of the default _id
+});
 
-// main Service schema
 const serviceSchema = new mongoose.Schema({
   serviceId: {
     type: String,
-    default: () => uuidv4(),
-    required: true,
+    default: uuidv4,
     unique: true
   },
   serviceHeading: {
@@ -39,13 +36,15 @@ const serviceSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
-  // array of { contentId, key, value }
   serviceContent: {
-    type: [serviceContentSchema],
+    type: [contentSchema],
     default: []
+  },
+  // Store logo as base64 string
+  logo: {
+    type: String,
+    default: null
   }
-}, {
-  timestamps: true
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('Service', serviceSchema);
