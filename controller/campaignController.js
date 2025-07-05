@@ -134,24 +134,47 @@ exports.getAllCampaigns = async (req, res) => {
 // Get campaigns by clientId
 exports.getCampaignsByClient = async (req, res) => {
   try {
-    const { clientId } = req.body;
+    const { clientId } = req.body;              // keep clientId in body if you prefer POST
+    const { page = 1, limit = 10, search = '' } = req.query;
+
     if (!clientId) {
       return res.status(400).json({ success: false, message: 'clientId is required' });
     }
 
+    // confirm client exists
     const client = await Client.findOne({ clientId });
     if (!client) {
       return res.status(404).json({ success: false, message: 'Client not found' });
     }
 
-    const campaigns = await Campaign
-      .find({ clientId })
-      .sort({ createdAt: -1 })
-      .lean();
+    // build filter: always filter by clientId, plus optional text search
+    const filter = { clientId };
+    if (search.trim()) {
+      filter.name = { $regex: search.trim(), $options: 'i' };
+    }
+
+    // pagination math
+    const pageNum  = Math.max(parseInt(page, 10), 1);
+    const limitNum = Math.max(parseInt(limit, 10), 1);
+    const skip     = (pageNum - 1) * limitNum;
+
+    // run both queries in parallel
+    const [ campaigns, total ] = await Promise.all([
+      Campaign.find(filter)
+              .sort({ createdAt: -1 })
+              .skip(skip)
+              .limit(limitNum)
+              .lean(),
+      Campaign.countDocuments(filter)
+    ]);
 
     return res.status(200).json({
-      success:   true,
-      count:     campaigns.length,
+      success:     true,
+      page:        pageNum,
+      limit:       limitNum,
+      totalItems:  total,
+      totalPages:  Math.ceil(total / limitNum),
+      count:       campaigns.length,
       campaigns
     });
   } catch (err) {
@@ -159,6 +182,7 @@ exports.getCampaignsByClient = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
 
 // Delete a campaign by campaignId
 exports.deleteCampaign = async (req, res) => {

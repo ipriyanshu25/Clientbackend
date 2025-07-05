@@ -1,9 +1,12 @@
 const router = require('express').Router();
-const { generateOtp, login,getClientById,getAllClients,generateEmailOtp,verifyEmailOtp} = require('../controller/clientController');
+const { generateOtp, register,getClientById,getAllClients,generateEmailOtp,verifyEmailOtp,generateLoginOtp,verifyLoginOtp} = require('../controller/clientController');
 const { verifyToken } = require('../middleware/auth');
 
 router.post('/generateOtp', generateOtp);
-router.post('/login', login);
+router.post('/register', register);
+
+router.post('/generateLoginOtp', generateLoginOtp);
+router.post('/verifyLoginOtp', verifyLoginOtp);
 
 router.post('/generateEmailOtp', generateEmailOtp);
 router.post('/verifyEmailOtp', verifyEmailOtp);
