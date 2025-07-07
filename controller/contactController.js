@@ -14,12 +14,12 @@ exports.sendContact = async (req, res) => {
 
     // Configure your SMTP transporter
     const transporter = nodemailer.createTransport({
-      host:   process.env.SMTP_HOST,                      // e.g. "smtp.example.com"
-      port:   Number(process.env.SMTP_PORT),              // 465 or 587
-      secure: process.env.SMTP_SECURE === 'true',         // true for 465, false for 587
+      host:   process.env.SMTP_HOST1,                      // e.g. "smtp.example.com"
+      port:   Number(process.env.SMTP_PORT1),              // 465 or 587
+      secure: process.env.SMTP_SECURE1 === 'true',         // true for 465, false for 587
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: process.env.SMTP_USER1,
+        pass: process.env.SMTP_PASS1,
       },
       logger: true,      // log to console
       debug:  true,      // include SMTP traffic in logs
@@ -36,7 +36,7 @@ exports.sendContact = async (req, res) => {
     // Send the email
     await transporter.sendMail({
       from:    email,                          // sender address
-      to:      process.env.MAIL_TO,            // receiver address
+      to:      process.env.MAIL_TO1,            // receiver address
       replyTo: email,                          // replies go back to client
       subject: `Contact Us: ${subject}`,
       text:    `Name: ${name}\nEmail: ${email}\n\n${message}`,
