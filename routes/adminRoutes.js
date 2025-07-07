@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { login } = require('../controller/admincontroller');
+const { login ,updateCredentials} = require('../controller/admincontroller');
 // const { protect } = require('../middleware/authMiddleware');
 
 // Public route
 router.post('/login', login);
+router.post('/update',updateCredentials);
 
 // Protected route to get current admin info
 // router.get('/me', protect, (req, res) => {
