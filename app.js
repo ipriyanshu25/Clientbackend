@@ -17,6 +17,7 @@ const cookieRoutes = require('./routes/cookieRoutes'); // Cookie policy routes
 const returnRoutes = require('./routes/returnRoutes'); // Return policy routes
 const shippingRoutes = require('./routes/shippingRoutes'); // Shipping policy routes
 const termsRoutes = require('./routes/termRoutes'); // Terms of service routes
+const faqRoutes = require('./routes/faqsRoutes'); // Uncomment if you have FAQ routes
 
 
 const app    = express();
@@ -44,6 +45,7 @@ app.use('/cookie', cookieRoutes); // Cookie policy routes
 app.use('/return', returnRoutes); // Return policy routes
 app.use('/shipping', shippingRoutes); // Shipping policy routes
 app.use('/terms', termsRoutes); // Terms of service routes
+app.use('/faqs', faqRoutes); // Uncomment if you have FAQ routes
 
 
 // connect to Mongo & start server

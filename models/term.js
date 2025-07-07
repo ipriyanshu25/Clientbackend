@@ -15,6 +15,6 @@ const termSchema = new mongoose.Schema({
 });
 
 const Term = mongoose.models.Term ||
-                      mongoose.model('TermPolicy', termSchema);
+  mongoose.model('TermPolicy', termSchema);
 
 module.exports = Term;

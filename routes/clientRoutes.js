@@ -1,22 +1,35 @@
 const router = require('express').Router();
-const { generateOtp, register,getClientById,getAllClients,generateEmailOtp,verifyEmailOtp,generateLoginOtp,verifyLoginOtp} = require('../controller/clientController');
+const {
+  generateOtp,
+  register,
+  login,
+  getClientById,
+  getAllClients,
+  generateResetOtp,
+  verifyResetOtp,
+  updatePassword
+} = require('../controller/clientController');
 const { verifyToken } = require('../middleware/auth');
 
-router.post('/generateOtp', generateOtp);
-router.post('/register', register);
+router.post('/generateOtp', generateOtp);      // step 1 of registration
+router.post('/register',    register);         // step 2 + password
 
-router.post('/generateLoginOtp', generateLoginOtp);
-router.post('/verifyLoginOtp', verifyLoginOtp);
-
-router.post('/generateEmailOtp', generateEmailOtp);
-router.post('/verifyEmailOtp', verifyEmailOtp);
+router.post('/login',       login);            // email+password
 
 
-router.post('/getById',getClientById);
-router.get('/getAll',getAllClients);
+/* queries */
+router.post('/getById',  getClientById);
+router.get ('/getAll',   getAllClients);
+
+/* password reset */
+router.post('/generateResetOtp', generateResetOtp); // step 1 of password reset
+router.post('/verifyResetOtp', verifyResetOtp);     // step 2 of password reset
+
+router.post('/update', updatePassword); // update passwprd
 
 router.get('/protected', verifyToken, (req, res) => {
   res.json({ message: 'Protected data', client: req.client });
 });
 
 module.exports = router;
+ 
