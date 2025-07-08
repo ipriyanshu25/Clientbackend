@@ -25,7 +25,7 @@ const server = http.createServer(app);
 
 // attach Socket.io
 app.use(cors({
-  origin:      process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
+  origin:      process.env.FRONTEND_ORIGIN || 'https://sharemitra.com',
   credentials: true,
 }));
 
@@ -47,7 +47,7 @@ app.use('/faqs', faqRoutes); // Uncomment if you have FAQ routes
 
 
 // connect to Mongo & start server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 6000;
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => {
