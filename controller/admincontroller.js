@@ -1,4 +1,5 @@
-const Admin     = require('../models/admin');
+// admincontroller.js
+const Admin      = require('../models/admin');
 const bcrypt    = require('bcryptjs');
 const jwt       = require('jsonwebtoken');
 const nodemailer= require('nodemailer');
@@ -8,7 +9,7 @@ const crypto    = require('crypto');
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: +process.env.SMTP_PORT,
-  secure: process.env.SMTP_SECURE==='true', // true for 465, false for other ports
+  secure: process.env.SMTP_SECURE === 'true',
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
@@ -25,61 +26,91 @@ async function sendOtp(email, subject, otp) {
   });
 }
 
-// 1️⃣ Register – request OTP
-exports.register = async (req, res) => {
-  const { email } = req.body;
+// ==== 1️⃣ Email Update Request – send OTP to current email ====
+exports.requestEmailUpdate = async (req, res) => {
+  const { adminId, newEmail } = req.body;
+  if (!adminId || !newEmail) {
+    return res.status(400).json({ message: 'adminId and newEmail are required' });
+  }
   try {
-    let admin = await Admin.findOne({ email });
-    if (admin && admin.isVerified) {
-      return res.status(400).json({ message: 'Email already registered' });
-    }
+    const admin = await Admin.findOne({ adminId });
     if (!admin) {
-      // create a placeholder admin
-      admin = new Admin({ 
-        adminId: crypto.randomUUID(), 
-        email 
-      });
+      return res.status(404).json({ message: 'Admin not found' });
     }
     // generate 6-digit OTP
     const otp = crypto.randomInt(100000, 999999).toString();
-    admin.emailOtp = {
+    admin.updateEmailOtp = {
       code: otp,
+      newEmail,
       expires: Date.now() + 10 * 60 * 1000 // 10 minutes
     };
     await admin.save();
-    await sendOtp(email, 'Verify your admin registration', otp);
-    res.json({ message: 'OTP sent to email' });
+    // send OTP to existing verified email
+    await sendOtp(admin.email, 'Confirm your email change', otp);
+    res.json({ message: 'OTP sent to your current email address' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// 2️⃣ Verify registration OTP & set password
-exports.verifyEmailOtp = async (req, res) => {
-  const { email, otp, password } = req.body;
+// ==== 2️⃣ Verify Email Update OTP & apply change ====
+exports.verifyEmailUpdate = async (req, res) => {
+  const { adminId, otp } = req.body;
+  if (!adminId || !otp) {
+    return res.status(400).json({ message: 'adminId and otp are required' });
+  }
   try {
-    const admin = await Admin.findOne({ email });
-    if (!admin || !admin.emailOtp?.code) {
-      return res.status(400).json({ message: 'No pending registration for this email' });
+    const admin = await Admin.findOne({ adminId });
+    if (!admin || !admin.updateEmailOtp?.code) {
+      return res.status(400).json({ message: 'No pending email update request' });
     }
-    if (Date.now() > admin.emailOtp.expires || otp !== admin.emailOtp.code) {
+    const { code, newEmail, expires } = admin.updateEmailOtp;
+    if (Date.now() > expires || otp !== code) {
       return res.status(400).json({ message: 'Invalid or expired OTP' });
     }
-    // mark verified + hash password
-    admin.isVerified = true;
-    const salt = await bcrypt.genSalt(10);
-    admin.password = await bcrypt.hash(password, salt);
-    admin.emailOtp = undefined;
+    // apply email change
+    admin.email = newEmail;
+    admin.updateEmailOtp = undefined;
     await admin.save();
-    res.json({ message: 'Registration complete. You can now log in.' });
+    // issue new JWT
+    const payload = { adminId: admin.adminId, email: admin.email };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+    res.json({ message: 'Email updated successfully', email: admin.email, token });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// 3️⃣ Login (only verified admins)
+// ==== 3️⃣ Password Update – verify old password, set new password ====
+exports.updatePassword = async (req, res) => {
+  const { adminId, oldPassword, newPassword } = req.body;
+  if (!adminId || !oldPassword || !newPassword) {
+    return res.status(400).json({ message: 'adminId, oldPassword, and newPassword are required' });
+  }
+  try {
+    const admin = await Admin.findOne({ adminId });
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+    // verify old password
+    const isMatch = await bcrypt.compare(oldPassword, admin.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Old password is incorrect' });
+    }
+    // hash and set new password
+    const salt = await bcrypt.genSalt(10);
+    admin.password = await bcrypt.hash(newPassword, salt);
+    await admin.save();
+    res.json({ message: 'Password updated successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ==== 4️⃣ Login (only verified admins) ==== (unchanged)
 exports.login = async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -145,50 +176,3 @@ exports.resetPassword = async (req, res) => {
 };
 
 
-exports.updateCredentials = async (req, res) => {
-  const { adminId, newEmail, newPassword } = req.body;
-
-  if (!adminId) {
-    return res.status(400).json({ message: 'adminId is required' });
-  }
-  if (!newEmail && !newPassword) {
-    return res
-      .status(400)
-      .json({ message: 'Must supply newEmail, newPassword, or both' });
-  }
-
-  // 1) Prepare the update object
-  const updates = {};
-  if (newEmail) {
-    updates.email = newEmail;
-  }
-  if (newPassword) {
-    const salt          = await bcrypt.genSalt(10);
-    updates.password    = await bcrypt.hash(newPassword, salt);
-  }
-
-  // 2) Atomically update and get the new document back
-  const updatedAdmin = await Admin.findOneAndUpdate(
-    { adminId },
-    { $set: updates },
-    { new: true }
-  );
-  if (!updatedAdmin) {
-    return res.status(404).json({ message: 'Admin not found' });
-  }
-
-  // 3) Log the new hash so you can check it in your console
-  console.log('🔄 Updated hash for', updatedAdmin.email, ':', updatedAdmin.password);
-
-  // 4) Issue a fresh JWT
-  const payload = { adminId: updatedAdmin.adminId, email: updatedAdmin.email };
-  const token   = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
-
-  // 5) Return everything—including the new hash—for debugging
-  return res.json({
-    message: 'Credentials updated successfully',
-    adminId: updatedAdmin.adminId,
-    email: updatedAdmin.email,
-    token
-  });
-};

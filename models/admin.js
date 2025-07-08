@@ -1,3 +1,4 @@
+// models/admin.js
 const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 
@@ -28,6 +29,12 @@ const adminSchema = new mongoose.Schema({
     code: String,
     expires: Date
   },
+  // store pending email-update requests
+  updateEmailOtp: {
+    code: String,
+    newEmail: String,
+    expires: Date
+  },
   resetOtp: {
     code: String,
     expires: Date
@@ -35,8 +42,5 @@ const adminSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
-
-// NOTE: Removed pre-save hook to avoid double-hashing.
-// Password hashing is now handled explicitly in controllers.
 
 module.exports = mongoose.model('Admin', adminSchema);
