@@ -135,9 +135,47 @@ exports.getClientById = async (req, res) => {
 // Retrieve all clients
 exports.getAllClients = async (req, res) => {
   try {
-    const clients = await Client.find()
-      .select('-_id -__v -otp -otpExpiry -pendingEmailOtp -pendingEmailOtpExpiry -pendingEmail');
-    res.status(200).json(clients);
+    // 1) Parse & normalize query params
+    const page       = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit      = Math.max(1, parseInt(req.query.limit, 10) || 10);
+    const sortBy     = req.query.sortBy      || 'createdAt';
+    const sortOrder  = req.query.sortOrder   === 'desc' ? 1 : -1;
+    const searchTerm = (req.query.search || '').trim();
+
+    // 2) Build base filter
+    const filter = {};
+    if (searchTerm) {
+      const regex = new RegExp(searchTerm, 'i');
+      filter.$or = [
+        { 'name.firstName': regex },
+        { 'name.lastName':  regex },
+        { email:            regex },
+      ];
+    }
+
+    // 3) Count total matching docs (for pagination meta)
+    const totalRecords = await Client.countDocuments(filter);
+
+    // 4) Fetch page of clients
+    const clients = await Client.find(filter)
+      .select('-_id -__v -otp -otpExpiry -pendingEmailOtp -pendingEmailOtpExpiry -pendingEmail')
+      .sort({ [sortBy]: sortOrder })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    // 5) Compute total pages
+    const totalPages = Math.ceil(totalRecords / limit);
+
+    // 6) Send response
+    res.status(200).json({
+      data: clients,
+      meta: {
+        page,
+        limit,
+        totalPages,
+        totalRecords,
+      },
+    });
   } catch (err) {
     console.error('getAllClients:', err);
     res.status(500).json({ error: err.message });

@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
-const bcrypt = require('bcryptjs');
 
 const adminSchema = new mongoose.Schema({
   adminId: {
@@ -18,18 +17,26 @@ const adminSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true
+    // only required once the admin has verified their email
+    required: function() { return this.isVerified; }
+  },
+  isVerified: {
+    type: Boolean,
+    default: false
+  },
+  emailOtp: {
+    code: String,
+    expires: Date
+  },
+  resetOtp: {
+    code: String,
+    expires: Date
   }
 }, {
   timestamps: true
 });
 
-// Hash password before saving
-adminSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
+// NOTE: Removed pre-save hook to avoid double-hashing.
+// Password hashing is now handled explicitly in controllers.
 
 module.exports = mongoose.model('Admin', adminSchema);
