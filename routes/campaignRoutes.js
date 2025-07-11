@@ -1,7 +1,7 @@
 // routes/campaignRoutes.js
 const express = require('express');
 const router = express.Router();
-const { createCampaign, getAllCampaigns,getCampaignsByClient,deleteCampaign } = require('../controller/campaignController');
+const { createCampaign, getAllCampaigns,getActiveCampaignsByClient,getPreviousCampaignsByClient } = require('../controller/campaignController');
 const authMiddleware = require('../middleware/auth'); // adjust path if needed
 
 // @route   POST /api/campaigns
@@ -14,8 +14,8 @@ router.post('/create', createCampaign);
 // @access  Private
 router.get('/getAll',getAllCampaigns);
 // @route   GET /api/campaigns/client/:clientId
-router.post('/getByClient',getCampaignsByClient);
-// @route   DELETE /api/campaigns/delete
-router.post('/delete', deleteCampaign);
+router.post('/active',getActiveCampaignsByClient);
+router.post('/previous',getPreviousCampaignsByClient);
+
 
 module.exports = router;

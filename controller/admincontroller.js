@@ -1,5 +1,8 @@
 // admincontroller.js
 const Admin      = require('../models/admin');
+const Campaign = require('../models/campaign');
+const { STATUS } = require('../models/campaign');
+const Client     = require('../models/client');
 const bcrypt    = require('bcryptjs');
 const jwt       = require('jsonwebtoken');
 const nodemailer= require('nodemailer');
@@ -175,4 +178,69 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
+exports.updateStatus = async (req, res) => {
+  try {
+    const { campaignId, status } = req.body;
 
+    // Validate inputs
+    if (!campaignId || ![STATUS.PENDING, STATUS.COMPLETED].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'campaignId and valid status (0 or 1) are required'
+      });
+    }
+
+    // Update the campaign
+    const campaign = await Campaign.findOneAndUpdate(
+      { campaignId },
+      { status },
+      { new: true, runValidators: true }
+    );
+    if (!campaign) {
+      return res.status(404).json({
+        success: false,
+        message: `Campaign not found: ${campaignId}`
+      });
+    }
+
+    // If marked completed, notify the client directly
+    if (status === STATUS.COMPLETED) {
+      const client = await Client
+        .findOne({ clientId: campaign.clientId })
+        .select('name.firstName email');
+
+      if (client && client.email) {
+        // format timestamp in IST
+        const timestamp = new Date().toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          hour12: true
+        });
+
+        await transporter.sendMail({
+          from: `"ShareMitra Notifications" <${process.env.SMTP_USER}>`,
+          to:   client.email,
+          subject: `Your ${campaign.serviceHeading} Campaign Is Complete`,
+          text: `Hello ${client.name.firstName},
+
+We’re happy to let you know that your campaign for “${campaign.serviceHeading}” was completed on ${timestamp} IST.
+
+Thank you for partnering with us. If you have any feedback or need further assistance, please reply to this email or contact care@sharemitra.com.
+
+Get More Services at https://sharemitra.com
+
+Best regards,
+The ShareMitra Team`
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Campaign status updated',
+      campaign
+    });
+  } catch (err) {
+    console.error('Error in updateStatus:', err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};

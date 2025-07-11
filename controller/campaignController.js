@@ -1,23 +1,58 @@
-// controllers/campaignController.js
-const Campaign         = require('../models/campaign');
-const Client           = require('../models/client');
-const Service          = require('../models/services');
-const { v4: uuidv4 }   = require('uuid');
+const Campaign = require('../models/campaign');
+const Client = require('../models/client');
+const Service = require('../models/services');
+const { v4: uuidv4 } = require('uuid');
+const nodemailer = require('nodemailer');
+const { STATUS } = require('../models/campaign');
 
-// Create a new campaign
+// Configure SMTP transporter
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT, 10),
+  secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+});
+const FROM_ADDRESS = process.env.SMTP_USER;
+
+// Helper to send mail via SMTP
+async function sendSmtpMail(to, subject, text) {
+  await transporter.sendMail({
+    from: `"ShareMitra Confirmation: Your Campaign Is Live " <${process.env.SMTP_USER}>`,
+    to,
+    subject,
+    text
+  });
+}
+function buildClientFilter(clientId, status, search) {
+  const filter = { clientId, status };
+  if (search && search.trim()) {
+    filter.serviceHeading = { $regex: search.trim(), $options: 'i' };
+  }
+  return filter;
+}
+
+// Create a new campaign and notify client via SMTP
 exports.createCampaign = async (req, res) => {
   try {
     const { clientId, serviceId, link, actions } = req.body;
 
-    // 1️⃣ Fetch client
+    // Validate inputs
+    if (!clientId || !serviceId || !actions) {
+      return res.status(400).json({ success: false, message: 'clientId, serviceId, and actions are required' });
+    }
+
+    // Fetch client (include email)
     const client = await Client
       .findOne({ clientId })
-      .select('name.firstName name.lastName');
+      .select('name.firstName name.lastName email');
     if (!client) {
       return res.status(404).json({ success: false, message: 'Client not found' });
     }
 
-    // 2️⃣ Fetch service
+    // Fetch service
     const service = await Service
       .findOne({ serviceId })
       .select('serviceHeading');
@@ -25,92 +60,60 @@ exports.createCampaign = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Service not found' });
     }
 
-    // 3️⃣ Build and save campaign (pre-validate hook does costs)
+    // Create and save campaign
     const campaign = new Campaign({
       clientId,
       clientName: {
         firstName: client.name.firstName,
-        lastName:  client.name.lastName
+        lastName: client.name.lastName
       },
       serviceId,
       serviceHeading: service.serviceHeading,
       link,
-      actions // array of { contentId, quantity }
+      actions,
+      status: STATUS.PENDING
     });
-
     await campaign.save();
 
-    // Return success message and campaignId only
+    // Fetch total amount from saved campaign
+    const totalAmount = campaign.totalAmount;
+
+    // Prepare professional email using descriptive action keys
+    const actionLines = campaign.actions
+      .map(a => `- ${a.contentKey}: ${a.quantity} units`)
+      .join('\n');
+
+    const subject = 'ShareMitra Campaign Is Live';
+    const body = `Dear ${client.name.firstName},
+
+We’re pleased to let you know that your campaign is succefully recieved. Below are the key details:
+
+Service: ${service.serviceHeading}
+URL:     ${link}
+
+Services Requested:
+${actionLines}
+
+Total Campaign Cost: $${campaign.totalAmount}
+
+If you have any questions or need further assistance, please reach out at care@sharemitra.com.
+
+Best regards,
+ShareMitra Marketing Team
+`;
+
+    await sendSmtpMail(client.email, subject, body);
     return res.status(201).json({
-      success:    true,
-      message:    'Campaign created successfully',
+      success: true,
+      message: 'Campaign created successfully',
       campaignId: campaign.campaignId
     });
   } catch (err) {
-    console.error(err);
+    console.error('Error in createCampaign:', err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
 
-/**
- * Update an existing campaign
- * Body: { campaignId, link?, actions? }
- * - To update an existing action, include its actionId + new quantity.
- * - To add a brand-new action, omit actionId (it gets generated).
- */
-exports.updateCampaign = async (req, res) => {
-  try {
-    const { campaignId, link, actions } = req.body;
-    if (!campaignId) {
-      return res.status(400).json({ success: false, message: 'campaignId is required' });
-    }
-
-    const campaign = await Campaign.findOne({ campaignId });
-    if (!campaign) {
-      return res.status(404).json({ success: false, message: 'Campaign not found' });
-    }
-
-    // Overwrite link if provided
-    if (typeof link === 'string') {
-      campaign.link = link.trim();
-    }
-
-    // Merge actions
-    if (actions !== undefined) {
-      if (!Array.isArray(actions)) {
-        return res.status(400).json({ success: false, message: 'actions must be an array' });
-      }
-
-      actions.forEach(({ actionId, contentId, quantity }) => {
-        if (actionId) {
-          // update existing
-          const existing = campaign.actions.find(a => a.actionId === actionId);
-          if (existing) {
-            existing.quantity = quantity;
-          }
-        } else {
-          // add new
-          campaign.actions.push({
-            actionId: uuidv4(),
-            contentId,
-            quantity
-          });
-        }
-      });
-    }
-
-    // Save (pre-validate recomputes costs)
-    await campaign.save();
-    return res.status(200).json({
-      success: true,
-      message: 'Campaign updated successfully',
-      campaign
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ success: false, message: err.message });
-  }
-};
 
 // Get all campaigns
 exports.getAllCampaigns = async (req, res) => {
@@ -121,8 +124,8 @@ exports.getAllCampaigns = async (req, res) => {
       .lean();
 
     return res.status(200).json({
-      success:   true,
-      count:     campaigns.length,
+      success: true,
+      count: campaigns.length,
       campaigns
     });
   } catch (err) {
@@ -132,78 +135,75 @@ exports.getAllCampaigns = async (req, res) => {
 };
 
 // Get campaigns by clientId
-exports.getCampaignsByClient = async (req, res) => {
+exports.getActiveCampaignsByClient = async (req, res) => {
   try {
-    const { clientId } = req.body;              // keep clientId in body if you prefer POST
+    const { clientId } = req.body;
     const { page = 1, limit = 10, search = '' } = req.query;
+    if (!clientId) return res.status(400).json({ success: false, message: 'clientId is required' });
 
-    if (!clientId) {
-      return res.status(400).json({ success: false, message: 'clientId is required' });
-    }
-
-    // confirm client exists
     const client = await Client.findOne({ clientId });
-    if (!client) {
-      return res.status(404).json({ success: false, message: 'Client not found' });
-    }
+    if (!client) return res.status(404).json({ success: false, message: 'Client not found' });
 
-    // build filter: always filter by clientId, plus optional text search
-    const filter = { clientId };
-    if (search.trim()) {
-      filter.name = { $regex: search.trim(), $options: 'i' };
-    }
-
-    // pagination math
     const pageNum  = Math.max(parseInt(page, 10), 1);
     const limitNum = Math.max(parseInt(limit, 10), 1);
     const skip     = (pageNum - 1) * limitNum;
 
-    // run both queries in parallel
-    const [ campaigns, total ] = await Promise.all([
-      Campaign.find(filter)
-              .sort({ createdAt: -1 })
-              .skip(skip)
-              .limit(limitNum)
-              .lean(),
-      Campaign.countDocuments(filter)
+    const filter = buildClientFilter(clientId, STATUS.PENDING, search);
+
+    const [campaigns, total] = await Promise.all([
+      Campaign.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+      Campaign.countDocuments(filter),
     ]);
 
     return res.status(200).json({
-      success:     true,
-      page:        pageNum,
-      limit:       limitNum,
-      totalItems:  total,
-      totalPages:  Math.ceil(total / limitNum),
-      count:       campaigns.length,
+      success: true,
+      page: pageNum,
+      limit: limitNum,
+      totalItems: total,
+      totalPages: Math.ceil(total / limitNum),
+      count: campaigns.length,
       campaigns
     });
   } catch (err) {
-    console.error('Error fetching campaigns by client:', err);
+    console.error('getActiveCampaignsByClient error:', err);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// GET /campaigns/previous
+exports.getPreviousCampaignsByClient = async (req, res) => {
+  try {
+    const { clientId } = req.body;
+    const { page = 1, limit = 10, search = '' } = req.query;
+    if (!clientId) return res.status(400).json({ success: false, message: 'clientId is required' });
+
+    const client = await Client.findOne({ clientId });
+    if (!client) return res.status(404).json({ success: false, message: 'Client not found' });
+
+    const pageNum  = Math.max(parseInt(page, 10), 1);
+    const limitNum = Math.max(parseInt(limit, 10), 1);
+    const skip     = (pageNum - 1) * limitNum;
+
+    const filter = buildClientFilter(clientId, STATUS.COMPLETED, search);
+
+    const [campaigns, total] = await Promise.all([
+      Campaign.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+      Campaign.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      page: pageNum,
+      limit: limitNum,
+      totalItems: total,
+      totalPages: Math.ceil(total / limitNum),
+      count: campaigns.length,
+      campaigns
+    });
+  } catch (err) {
+    console.error('getPreviousCampaignsByClient error:', err);
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
 
-// Delete a campaign by campaignId
-exports.deleteCampaign = async (req, res) => {
-  try {
-    const { campaignId } = req.body;
-    if (!campaignId) {
-      return res.status(400).json({ success: false, message: 'campaignId is required' });
-    }
-
-    const deleted = await Campaign.findOneAndDelete({ campaignId });
-    if (!deleted) {
-      return res.status(404).json({ success: false, message: 'Campaign not found' });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Campaign deleted successfully',
-      campaign: deleted
-    });
-  } catch (err) {
-    console.error('Error deleting campaign:', err);
-    return res.status(500).json({ success: false, message: err.message });
-  }
-};

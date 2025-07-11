@@ -16,4 +16,6 @@ router.post('/update-email/verify',  adminC.verifyEmailUpdate);
 // Password update
 router.post('/update-password', adminC.updatePassword);
 
+router.post('/updatestauts', adminC.updateStatus);
+
 module.exports = router;

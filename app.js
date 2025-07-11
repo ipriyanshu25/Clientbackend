@@ -18,6 +18,7 @@ const returnRoutes = require('./routes/returnRoutes'); // Return policy routes
 const shippingRoutes = require('./routes/shippingRoutes'); // Shipping policy routes
 const termsRoutes = require('./routes/termRoutes'); // Terms of service routes
 const faqRoutes = require('./routes/faqsRoutes'); // Uncomment if you have FAQ routes
+const invoiceRoutes = require('./routes/invoiceRoutes'); // Uncomment if you have invoice routes
 
 
 const app    = express();
@@ -44,6 +45,7 @@ app.use('/return', returnRoutes); // Return policy routes
 app.use('/shipping', shippingRoutes); // Shipping policy routes
 app.use('/terms', termsRoutes); // Terms of service routes
 app.use('/faqs', faqRoutes); // Uncomment if you have FAQ routes
+app.use('/invoice', invoiceRoutes); // Uncomment if you have invoice routes
 
 
 // connect to Mongo & start server

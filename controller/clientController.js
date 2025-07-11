@@ -14,12 +14,6 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-/**
- * POST /client/generateOtp
- * Body: { firstName, lastName, email }
- *
- * Only for **registration**. If the email is already registered, returns 409 Conflict.
- */
 
 const SALT_ROUNDS = 10; // bcrypt salt rounds for password hashing
 exports.generateOtp = async (req, res) => {
@@ -189,27 +183,50 @@ exports.getAllClients = async (req, res) => {
 /* PUT /client/updatePassword
  * Body: { clientId, oldPassword, newPassword }
  */
+// controllers/clientController.js
 exports.updatePassword = async (req, res) => {
   try {
     const { clientId, oldPassword, newPassword } = req.body;
-    if (!clientId || !oldPassword || !newPassword)
+    if (!clientId || !oldPassword || !newPassword) {
       return res.status(400).json({
         message: 'clientId, oldPassword and newPassword are required'
       });
+    }
 
-    // ⚠️  look-up by clientId, not email
+    // Lookup by clientId
     const client = await Client.findOne({ clientId });
-    if (!client || !client.passwordHash)
+    if (!client || !client.passwordHash) {
       return res.status(404).json({ message: 'Account not found' });
+    }
 
-    // verify old password
+    // Verify old password
     const ok = await client.comparePassword(oldPassword);
-    if (!ok)
+    if (!ok) {
       return res.status(401).json({ message: 'Old password incorrect' });
+    }
 
-    // hash & store new password
+    // Hash and store new password
     client.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
     await client.save();
+
+    // Send confirmation email
+    const timestamp = new Date().toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour12: true
+    });
+    await transporter.sendMail({
+      from: `"Password Updated! " <${process.env.SMTP_USER}>`,
+      to: client.email,
+      subject: 'Your ShareMitra Password Was Updated',
+      text: `Hello ${client.name.firstName},
+
+Your account password was successfully updated on ${timestamp}.
+
+If you did not make this change, please contact our support team immediately at care@sharemitra.com.
+
+Best regards,
+ShareMitra Support Team`
+    });
 
     res.status(200).json({ message: 'Password updated successfully' });
   } catch (err) {
@@ -217,6 +234,7 @@ exports.updatePassword = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
 
 
 /* -------------------------------------------------------------------- */
